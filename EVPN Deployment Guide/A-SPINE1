@@ -1,0 +1,102 @@
+service routing protocols model multi-agent
+!
+hostname A-SPINE1
+!
+vrf definition MGMT
+!
+interface Ethernet1
+   description A-LEAF1A
+   no switchport
+   ip address 10.101.201.201/24
+!
+interface Ethernet2
+   description A-LEAF2A
+   no switchport
+   ip address 10.102.201.201/24
+!
+interface Ethernet3
+   description A-LEAF2B
+   no switchport
+   ip address 10.103.201.201/24
+!
+interface Ethernet4
+   description A-SVC1A
+   no switchport
+   ip address 10.104.201.201/24
+!
+interface Ethernet5
+   description A-SVC1B
+   no switchport
+   ip address 10.105.201.201/24
+!
+interface Ethernet6
+   description A-BL1A
+   no switchport
+   ip address 10.106.201.201/24
+!
+interface Ethernet7
+   description A-BL1B
+   no switchport
+   ip address 10.107.201.201/24
+!
+interface Loopback0
+   description EVPN Peering Source
+   ip address 1.1.1.201/32
+!
+interface Management1
+   vrf forwarding MGMT
+   ip address 10.50.50.201/24
+!
+ip route vrf MGMT 0.0.0.0/0 10.50.50.1
+!
+ip routing
+no ip routing vrf MGMT
+!
+ip prefix-list PL-LOOPBACKS seq 10 permit 1.1.1.0/24 le 32
+ip prefix-list PL-P2P-UNDERLAY seq 10 permit 10.0.0.0/8 le 31
+!
+route-map RM-CONN-2-BGP permit 10
+   match ip address prefix-list PL-LOOPBACKS
+!
+route-map RM-CONN-2-BGP permit 20
+   match ip address prefix-list PL-P2P-UNDERLAY
+!
+peer-filter LEAF-AS-RANGE
+   10 match as-range 65001-65199 result accept
+!
+router bgp 65001
+   router-id 1.1.1.201
+   no bgp default ipv4-unicast
+   bgp listen range 1.1.1.0/24 peer-group EVPN-OVERLAY-PEERS peer-filter LEAF-AS-RANGE
+   bgp listen range 10.0.0.0/8 peer-group IPv4-UNDERLAY-PEERS peer-filter LEAF-AS-RANGE
+   neighbor EVPN-OVERLAY-PEERS peer-group
+   neighbor EVPN-OVERLAY-PEERS next-hop-unchanged
+   neighbor EVPN-OVERLAY-PEERS update-source Loopback0
+   neighbor EVPN-OVERLAY-PEERS fall-over bfd
+   neighbor EVPN-OVERLAY-PEERS ebgp-multihop 3
+   neighbor EVPN-OVERLAY-PEERS password @rista123
+   neighbor EVPN-OVERLAY-PEERS send-community
+   neighbor EVPN-OVERLAY-PEERS maximum-routes 0 
+   neighbor IPv4-UNDERLAY-PEERS peer-group
+   neighbor IPv4-UNDERLAY-PEERS password @rista123
+   neighbor IPv4-UNDERLAY-PEERS send-community
+   neighbor IPv4-UNDERLAY-PEERS maximum-routes 12000 
+   redistribute connected route-map RM-CONN-2-BGP
+   !
+   address-family evpn
+      neighbor EVPN-OVERLAY-PEERS activate
+   !
+   address-family ipv4
+      neighbor IPv4-UNDERLAY-PEERS activate
+!
+management api http-commands
+   protocol http
+   no shutdown
+   !
+   vrf MGMT
+      no shutdown
+!
+management ssh
+   vrf MGMT
+      no shutdown
+

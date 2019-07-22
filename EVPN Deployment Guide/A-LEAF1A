@@ -1,0 +1,160 @@
+service routing protocols model multi-agent
+!
+hardware tcam profile vxlan-routing
+!
+hostname A-LEAF1A
+!
+spanning-tree mode rapid-pvst
+!
+vlan 10
+   name Ten
+!
+vlan 50
+   name Fifty
+!
+vrf definition A
+!
+vrf definition B
+!
+vrf definition MGMT
+!
+interface Ethernet1
+   description A-SPINE1
+   no switchport
+   ip address 10.101.201.101/24
+!
+interface Ethernet2
+   description A-SPINE2
+   no switchport
+   ip address 10.101.202.101/24
+!
+interface Ethernet3
+   description HostA
+   switchport access vlan 10
+   spanning-tree portfast
+!
+interface Ethernet4
+   description HostD
+   switchport access vlan 50
+   spanning-tree portfast
+!
+interface Loopback0
+   description EVPN Peering Source
+   ip address 1.1.1.101/32
+!
+interface Loopback1
+   description VXLAN Tunnel Source
+   ip address 2.2.2.1/32
+!
+interface Loopback201
+   vrf forwarding A
+   ip address 201.0.0.101/32
+!
+interface Loopback202
+   vrf forwarding B
+   ip address 202.0.0.101/32
+!
+interface Management1
+   vrf forwarding MGMT
+   ip address 10.50.50.101/24
+!
+interface Vlan10
+   vrf forwarding A
+   ip address virtual 10.10.10.1/24
+!
+interface Vlan50
+   vrf forwarding B
+   ip address virtual 50.50.50.1/24
+!
+interface Vxlan1
+   vxlan source-interface Loopback1
+   vxlan udp-port 4789
+   vxlan vlan 10,50 vni 10010,10050
+   vxlan vrf A vni 50001
+   vxlan vrf B vni 50002
+!
+ip virtual-router mac-address 00:1c:73:aa:bb:cc
+ip address virtual source-nat vrf A address 201.0.0.101
+ip address virtual source-nat vrf B address 202.0.0.101
+!
+ip route vrf MGMT 0.0.0.0/0 10.50.50.1
+!
+ip routing
+ip routing vrf A
+ip routing vrf B
+no ip routing vrf MGMT
+!
+ip prefix-list PL-LOOPBACKS seq 10 permit 1.1.1.0/24 eq 32
+ip prefix-list PL-LOOPBACKS seq 20 permit 2.2.2.0/24 eq 32
+ip prefix-list PL-P2P-UNDERLAY seq 10 permit 10.0.0.0/8 le 31
+!
+route-map RM-CONN-2-BGP permit 10
+   match ip address prefix-list PL-LOOPBACKS
+!
+route-map RM-CONN-2-BGP permit 20
+   match ip address prefix-list PL-P2P-UNDERLAY
+!
+router bgp 65101
+   router-id 1.1.1.101
+   no bgp default ipv4-unicast
+   maximum-paths 2
+   neighbor EVPN-OVERLAY-PEERS peer-group
+   neighbor EVPN-OVERLAY-PEERS remote-as 65001
+   neighbor EVPN-OVERLAY-PEERS update-source Loopback0
+   neighbor EVPN-OVERLAY-PEERS fall-over bfd
+   neighbor EVPN-OVERLAY-PEERS ebgp-multihop 3
+   neighbor EVPN-OVERLAY-PEERS password @rista123
+   neighbor EVPN-OVERLAY-PEERS send-community
+   neighbor EVPN-OVERLAY-PEERS maximum-routes 0 
+   neighbor IPv4-UNDERLAY-PEERS peer-group
+   neighbor IPv4-UNDERLAY-PEERS remote-as 65001
+   neighbor IPv4-UNDERLAY-PEERS password @rista123
+   neighbor IPv4-UNDERLAY-PEERS send-community
+   neighbor IPv4-UNDERLAY-PEERS maximum-routes 12000 
+   neighbor 1.1.1.201 peer-group EVPN-OVERLAY-PEERS
+   neighbor 1.1.1.202 peer-group EVPN-OVERLAY-PEERS
+   neighbor 10.101.201.201 peer-group IPv4-UNDERLAY-PEERS
+   neighbor 10.101.202.202 peer-group IPv4-UNDERLAY-PEERS
+   redistribute connected route-map RM-CONN-2-BGP
+   !
+   vlan-aware-bundle TENANT-A
+      rd 1.1.1.101:1
+      route-target both 1:1
+      redistribute learned
+      vlan 10-49
+   !
+   vlan-aware-bundle TENANT-B
+      rd 1.1.1.101:2
+      route-target both 2:2
+      redistribute learned
+      vlan 50-69
+   !
+   address-family evpn
+      neighbor EVPN-OVERLAY-PEERS activate
+   !
+   address-family ipv4
+      neighbor IPv4-UNDERLAY-PEERS activate
+   !
+   vrf A
+      rd 1.1.1.101:1
+      route-target import evpn 1:1
+      route-target export evpn 1:1
+      redistribute connected
+   !
+   vrf B
+      rd 1.1.1.101:2
+      route-target import evpn 2:2
+      route-target export evpn 2:2
+      redistribute connected
+!
+management api http-commands
+   protocol http
+   no shutdown
+   !
+   vrf MGMT
+      no shutdown
+!
+management ssh
+   vrf MGMT
+      no shutdown
+
