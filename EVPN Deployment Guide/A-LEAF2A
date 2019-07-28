@@ -133,6 +133,8 @@ mlag configuration
    local-interface Vlan4094
    peer-address 10.0.0.2
    peer-link Port-Channel1000
+   reload-delay mlag 780
+   reload-delay non-mlag 1020
 !
 route-map RM-CONN-2-BGP permit 10
    match ip address prefix-list PL-LOOPBACKS
